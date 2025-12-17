@@ -46,16 +46,26 @@ export default function ProductoDetailPage() {
     fetchProduct();
   }, [id, toast]);
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (!product) return;
-    for (let i = 0; i < quantity; i++) {
-      addItem(product);
+    try {
+      for (let i = 0; i < quantity; i++) {
+        await addItem(product);
+      }
+      toast({
+        title: 'Producto agregado',
+        description: `${quantity}x ${product.nombre} se agregó al carrito`,
+      });
+      openCart();
+    } catch (error) {
+      console.error('Error al agregar al carrito:', error);
+      const message = error instanceof Error ? error.message : 'No se pudo agregar el producto al carrito. Verifica tu conexión.';
+      toast({
+        title: 'Error',
+        description: message,
+        variant: 'destructive',
+      });
     }
-    toast({
-      title: 'Producto agregado',
-      description: `${quantity}x ${product.nombre} se agregó al carrito`,
-    });
-    openCart();
   };
 
   if (loading) {

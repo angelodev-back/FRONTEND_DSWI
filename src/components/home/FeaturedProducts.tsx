@@ -26,13 +26,23 @@ export function FeaturedProducts() {
     fetchProducts();
   }, []);
 
-  const handleAddToCart = (product: Producto) => {
-    addItem(product);
-    toast({
-      title: 'Producto agregado',
-      description: `${product.nombre} se agregó al carrito`,
-    });
-    openCart();
+  const handleAddToCart = async (product: Producto) => {
+    try {
+      await addItem(product);
+      toast({
+        title: 'Producto agregado',
+        description: `${product.nombre} se agregó al carrito`,
+      });
+      openCart();
+    } catch (error) {
+      console.error('Error al agregar al carrito:', error);
+      const message = error instanceof Error ? error.message : 'No se pudo agregar el producto al carrito. Verifica tu conexión.';
+      toast({
+        title: 'Error',
+        description: message,
+        variant: 'destructive',
+      });
+    }
   };
 
   if (loading) {

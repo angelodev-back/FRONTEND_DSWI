@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useReducer, ReactNode, useCallback, useEffect } from 'react';
 import { Producto } from '@/lib/api';
-import { carritoApi, Carrito, CarritoDetalle } from '@/lib/api';
+import { carritoApi, Carrito, CarritoDetalle, usuariosApi, Usuario } from '@/lib/api';
 
 export interface CartItem {
   idDetalle: number;
@@ -60,12 +60,56 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 export function CartProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(cartReducer, initialState);
 
-  const getUserId = () => {
-    if (typeof localStorage === 'undefined') return 1;
+  const getStoredUserId = () => {
+    if (typeof localStorage === 'undefined') return undefined;
     const stored = localStorage.getItem('userId');
     const parsed = stored ? Number(stored) : NaN;
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
   };
+
+  const ensureUserId = useCallback(async (): Promise<number> => {
+    if (typeof localStorage === 'undefined') return 1;
+
+    try {
+      const currentUserStr = localStorage.getItem('currentUser');
+      if (currentUserStr) {
+        const currentUser = JSON.parse(currentUserStr) as Usuario;
+        if (currentUser?.idUsuario) {
+          localStorage.setItem('userId', String(currentUser.idUsuario));
+          return currentUser.idUsuario;
+        }
+      }
+
+      const storedId = getStoredUserId();
+      if (storedId) return storedId;
+
+      try {
+        const existing = await usuariosApi.getByEmail('guest@local');
+        if (existing?.idUsuario) {
+          localStorage.setItem('userId', String(existing.idUsuario));
+          return existing.idUsuario;
+        }
+      } catch (_) {
+        // Si no existe, lo creamos abajo
+      }
+
+      const guest = await usuariosApi.registrar({
+        nombre: 'Invitado',
+        apellido: '',
+        email: 'guest@local',
+        contraseña: 'guest',
+        telefono: '',
+        direccion: '',
+        estado: 'ACTIVO',
+      });
+      localStorage.setItem('userId', String(guest.idUsuario));
+      return guest.idUsuario;
+    } catch (e) {
+      console.error('No se pudo asegurar userId:', e);
+      // Último recurso: 1 (puede fallar si no existe en BD)
+      return 1;
+    }
+  }, []);
 
   const mapBackendToItems = useCallback((carrito: Carrito): CartItem[] => {
     if (!carrito.detalles) return [];
@@ -87,21 +131,31 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const syncFromBackend = useCallback(async () => {
-    const carrito = await carritoApi.getByUsuario(getUserId());
+    const userId = await ensureUserId();
+    const carrito = await carritoApi.getByUsuario(userId);
     dispatch({ type: 'SET_FROM_BACKEND', payload: mapBackendToItems(carrito) });
-  }, [mapBackendToItems]);
+  }, [mapBackendToItems, ensureUserId]);
 
   useEffect(() => {
     syncFromBackend().catch(() => {});
   }, [syncFromBackend]);
 
   const addItem = async (producto: Producto) => {
-    const updated = await carritoApi.addItem(getUserId(), { idProducto: producto.idProducto, cantidad: 1 });
-    dispatch({ type: 'UPDATE_FROM_BACKEND', payload: mapBackendToItems(updated) });
+    try {
+      const userId = await ensureUserId();
+      console.log('Agregando producto al carrito:', producto.idProducto, 'Usuario:', userId);
+      const updated = await carritoApi.addItem(userId, { idProducto: producto.idProducto, cantidad: 1 });
+      console.log('Respuesta del backend:', updated);
+      dispatch({ type: 'UPDATE_FROM_BACKEND', payload: mapBackendToItems(updated) });
+    } catch (error) {
+      console.error('Error agregando producto al carrito:', error);
+      throw error;
+    }
   };
 
   const removeItem = async (idDetalle: number) => {
-    const updated = await carritoApi.removeItem(getUserId(), idDetalle);
+    const userId = await ensureUserId();
+    const updated = await carritoApi.removeItem(userId, idDetalle);
     dispatch({ type: 'UPDATE_FROM_BACKEND', payload: mapBackendToItems(updated) });
   };
 
@@ -110,13 +164,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
       return removeItem(item.idDetalle);
     }
     // Estrategia: eliminar y recrear el detalle con la nueva cantidad
-    await carritoApi.removeItem(getUserId(), item.idDetalle);
-    const updated = await carritoApi.addItem(getUserId(), { idProducto: item.producto.idProducto, cantidad: newQuantity });
+    const userId = await ensureUserId();
+    await carritoApi.removeItem(userId, item.idDetalle);
+    const updated = await carritoApi.addItem(userId, { idProducto: item.producto.idProducto, cantidad: newQuantity });
     dispatch({ type: 'UPDATE_FROM_BACKEND', payload: mapBackendToItems(updated) });
   };
 
   const clearCart = async () => {
-    const updated = await carritoApi.clear(getUserId());
+    const userId = await ensureUserId();
+    const updated = await carritoApi.clear(userId);
     dispatch({ type: 'UPDATE_FROM_BACKEND', payload: mapBackendToItems(updated) });
   };
   const toggleCart = () => dispatch({ type: 'TOGGLE_CART' });

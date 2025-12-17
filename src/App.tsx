@@ -16,7 +16,12 @@ import CartPage from "./pages/CartPage";
 
 const queryClient = new QueryClient();
 
-const App = () => (
+const App = () => {
+  if (typeof window !== 'undefined' && !localStorage.getItem('userId')) {
+    localStorage.setItem('userId', '1');
+  }
+
+  return (
   <QueryClientProvider client={queryClient}>
     <CartProvider>
       <FavoritesProvider>
@@ -40,6 +45,7 @@ const App = () => (
       </FavoritesProvider>
     </CartProvider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;

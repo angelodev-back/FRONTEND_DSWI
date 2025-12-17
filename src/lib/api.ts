@@ -78,7 +78,13 @@ async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> 
   });
 
   if (!response.ok) {
-    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+    let details = '';
+    try {
+      details = await response.text();
+    } catch {
+      // ignore
+    }
+    throw new Error(`API Error: ${response.status} ${response.statusText}${details ? ` - ${details}` : ''}`);
   }
 
   return response.json();
@@ -116,7 +122,7 @@ export const usuariosApi = {
   getAll: () => fetchApi<Usuario[]>('/users'),
   getActivos: () => fetchApi<Usuario[]>('/users/active'),
   getById: (id: number) => fetchApi<Usuario>(`/users/${id}`),
-  getByEmail: (email: string) => fetchApi<Usuario>(`/users/email/${email}`),
+  getByEmail: (email: string) => fetchApi<Usuario>(`/users/email/${encodeURIComponent(email)}`),
   login: (email: string, contraseña: string) =>
     fetchApi<Usuario>('/users/login', { method: 'POST', body: JSON.stringify({ email, contraseña }) }),
   registrar: (usuario: Omit<Usuario, 'idUsuario' | 'fechaRegistro'> & { contraseña: string }) =>
@@ -145,5 +151,5 @@ export const carritoApi = {
     fetchApi<Carrito>(`/cart/user/${idUsuario}/items`, { method: 'POST', body: JSON.stringify(item) }),
   removeItem: (idUsuario: number, idDetalle: number) =>
     fetchApi<Carrito>(`/cart/user/${idUsuario}/items/${idDetalle}`, { method: 'DELETE' }),
-  clear: (idUsuario: number) => fetchApi<Carrito>(`/cart/user/${idUsuario}`),
+  clear: (idUsuario: number) => fetchApi<Carrito>(`/cart/user/${idUsuario}`, { method: 'DELETE' }),
 };
